@@ -80,6 +80,9 @@ options = HandLandmarkerOptions(
     running_mode=VisionRunningMode.IMAGE
 )
 
+EXCLUDE_GESTURE = {"No Hands", "Unknown"}
+CURRENT_GESTURE = "None"
+
 # Main loop
 with HandLandmarker.create_from_options(options) as landmarker:
     while True:
@@ -110,7 +113,18 @@ with HandLandmarker.create_from_options(options) as landmarker:
             states = count_fingers(first, is_right, w, h)
             label = gesture_from_states(states)
 
-        # Bottom label
+            # Action for detected hand gesture
+            if label not in EXCLUDE_GESTURE and CURRENT_GESTURE != label:
+                CURRENT_GESTURE = label
+                print("Detected Gesture: ", label)
+
+                match label:
+                    case "Rock":
+                        print("Rock n Roll")
+                    case "Peace":
+                        print("Peace Sign")
+
+        # Add Bottom label
         draw_bottom_label(frame, label)
 
         cv2.imshow("Hands", frame)
