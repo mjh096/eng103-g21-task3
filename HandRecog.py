@@ -2,9 +2,15 @@ import cv2, os
 import mediapipe as mp
 from pathlib import Path
 
+from gpiozero import LED
+
 # Variables
 WORKING_DIR = Path.cwd()
 MODELS_DIR = WORKING_DIR / "models"
+
+# GPIO LEDs
+AVAILABLE_LED_PINS = [17]
+LEDS = {pin: LED(pin) for pin in AVAILABLE_LED_PINS}
 
 # Gesture helpers
 TIP_IDS = [4, 8, 12, 16, 20]     # thumb, index, middle, ring, pinky
@@ -25,6 +31,20 @@ def count_fingers(landmarks, is_right, w, h):
         tip, pip = TIP_IDS[i], PIP_IDS[i]
         fingers[i] = 1 if ys[tip] < ys[pip] else 0
     return fingers
+
+def toggle_gpio_led(pin):
+    led = LEDS.get(pin)
+
+    if led is None:
+        print(f"WARNING: GPIO {pin} is not configured in AVAILABLE_LED_PINS={AVAILABLE_LED_PINS}")
+        return
+
+    try:
+        led.toggle()
+        print(f"ACTION: GPIO {pin} -> {'ON' if led.is_lit else 'OFF'}")
+    except Exception as e:
+        print(f"ERROR controlling GPIO {pin}: {e}")
+        return bool(led.is_lit) if hasattr(led, "is_lit") else False
 
 def gesture_from_states(f):
     """Map finger states to a label."""
@@ -122,7 +142,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
                     case "Rock":
                         print("Rock n Roll")
                     case "Peace":
-                        print("Peace Sign")
+                        toggle_gpio_led(17)
 
         # Add Bottom label
         draw_bottom_label(frame, label)
