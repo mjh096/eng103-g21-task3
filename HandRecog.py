@@ -143,6 +143,8 @@ with HandLandmarker.create_from_options(options) as landmarker:
                         toggle_gpio_led(27)
                     case "Peace":
                         toggle_gpio_led(17)
+                    case "Middle Finger":
+                        toggle_gpio_led(22)
 
         # Add Bottom label
         draw_bottom_label(frame, label)
