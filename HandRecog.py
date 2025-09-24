@@ -9,7 +9,7 @@ WORKING_DIR = Path.cwd()
 MODELS_DIR = WORKING_DIR / "models"
 
 # GPIO LEDs
-AVAILABLE_LED_PINS = [17,22,27]
+AVAILABLE_LED_PINS = [17,22,27,5,6]
 LEDS = {pin: LED(pin) for pin in AVAILABLE_LED_PINS}
 
 # Gesture helpers
@@ -145,6 +145,10 @@ with HandLandmarker.create_from_options(options) as landmarker:
                         toggle_gpio_led(17)
                     case "Middle Finger":
                         toggle_gpio_led(22)
+                    case "Thumbs Up":
+                        toggle_gpio_led(5)
+                    case "Open Palm":
+                        toggle_gpio_led(6)
 
         # Add Bottom label
         draw_bottom_label(frame, label)
