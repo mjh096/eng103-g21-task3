@@ -68,15 +68,66 @@ def draw_bottom_label(img, text):
     y = h - 10
     cv2.putText(img, text, (x, y), font, scale, (0, 255, 0), thick, cv2.LINE_AA)
 
-#  Camera Settings
-cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-if not cap.isOpened():
-    raise SystemExit("ERROR: Could not open /dev/video0")
-cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-cap.set(cv2.CAP_PROP_FPS, 30)
-cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+# Camera wrapper (USB via OpenCV or fallback to PI Camera) ---
+class UnifiedCamera:
+    def __init__(self, width=640, height=480, fps=30):
+        self.width, self.height, self.fps = width, height, fps
+        self.mode = None
+        self.cap = None
+        self.picam2 = None
+
+        # Try USB webcam via OpenCV first
+        cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            cap.set(cv2.CAP_PROP_FPS, self.fps)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            ok, _ = cap.read()
+            if ok:
+                self.mode = "cv2"
+                self.cap = cap
+                print("Camera: Using USB webcam (/dev/video0) via OpenCV.")
+                return
+            cap.release()
+
+        # Fallback: Pi Camera v2 via Picamera2
+        try:
+            from picamera2 import Picamera2
+            self.picam2 = Picamera2()
+            cfg = self.picam2.create_video_configuration(
+                main={"format": "RGB888", "size": (self.width, self.height)},
+                controls={"FrameDurationLimits": (int(1e6/self.fps), int(1e6/self.fps))}
+            )
+            self.picam2.configure(cfg)
+            self.picam2.start()
+            self.mode = "picam2"
+            print("Camera: Using Pi Camera v2 via Picamera2.")
+        except Exception as e:
+            raise SystemExit(f"ERROR: No camera available (USB failed, Picamera2 fallback failed: {e})")
+
+    def read(self):
+        if self.mode == "cv2":
+            return self.cap.read()
+        elif self.mode == "picam2":
+            # Picamera2 returns RGB; convert to BGR for OpenCV
+            import numpy as np
+            frame_rgb = self.picam2.capture_array()
+            if frame_rgb is None:
+                return False, None
+            return True, cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        return False, None
+
+    def release(self):
+        if self.mode == "cv2" and self.cap:
+            self.cap.release()
+        elif self.mode == "picam2" and self.picam2:
+            try: self.picam2.stop()
+            except: pass
+
+#  Load Camera
+cam = UnifiedCamera(width=640, height=480, fps=30)
 
 #  MediaPipe Tasks shortcuts
 BaseOptions = mp.tasks.BaseOptions
@@ -106,7 +157,7 @@ CURRENT_GESTURE = "None"
 # Main loop
 with HandLandmarker.create_from_options(options) as landmarker:
     while True:
-        ok, frame = cap.read()
+        ok, frame = cam.read()
         if not ok:
             break
 
@@ -160,5 +211,5 @@ with HandLandmarker.create_from_options(options) as landmarker:
         if cv2.getWindowProperty("Hands", cv2.WND_PROP_VISIBLE) < 1:
             break
 
-cap.release()
+cam.release()
 cv2.destroyAllWindows()
