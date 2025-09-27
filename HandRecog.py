@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Sequence
-
+import time
+import board
+import adafruit_dht
 import cv2
 import mediapipe as mp
 from gpiozero import LED
@@ -31,6 +33,9 @@ GESTURE_TO_PIN = {
     "Open Palm": 6,
 }
 
+# DHT Sensor configuration
+DHT_BCM_PIN = 4
+
 # Gesture helpers
 TIP_IDS = [4, 8, 12, 16, 20]  # thumb, index, middle, ring, pinky
 PIP_IDS = [2, 6, 10, 14, 18]  # thumb IP (2), and PIPs for others
@@ -41,6 +46,47 @@ BaseOptions = mp.tasks.BaseOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+
+def _board_pin_from_bcm(bcm: int):
+    """Map a BCM pin number (e.g., 4) to the corresponding `board.D#` pin (e.g., board.D4)."""
+    try:
+        return getattr(board, f"D{bcm}")
+    except AttributeError as e:
+        raise ValueError(f"No board pin mapping for BCM {bcm}.") from e
+
+# Create one reusable sensor instance
+_dht = adafruit_dht.DHT11(_board_pin_from_bcm(DHT_BCM_PIN), use_pulseio=False)
+
+def set_dht_pin(bcm_pin: int) -> None:
+    """Reinitialize the DHT11 on a new BCM pin at runtime."""
+    global _dht, DHT_BCM_PIN
+    DHT_BCM_PIN = bcm_pin
+    _dht = adafruit_dht.DHT11(_board_pin_from_bcm(bcm_pin), use_pulseio=False)
+
+def read_dht11(pin: int = DHT_BCM_PIN) -> tuple[float | None, float | None]:
+    """Read humidity (%) and temperature (°C) from a DHT11 sensor."""
+    global _dht
+    # Re-init if caller specifies a different pin
+    if pin != DHT_BCM_PIN:
+        set_dht_pin(pin)
+
+    try:
+        humidity = _dht.humidity
+        temperature = _dht.temperature
+        if humidity is None or temperature is None:
+            print("WARNING: DHT11 read returned None values.")
+        return humidity, temperature
+    except RuntimeError as e:
+        # Common/expected for DHT sensors; just try again later
+        print(f"WARNING: DHT11 read failed: {e}")
+        return None, None
+    finally:
+        time.sleep(2.0)
+
+def read_dht11_temperature(pin: int = DHT_BCM_PIN) -> float | None:
+    """Read only the temperature (°C) from the DHT11."""
+    _, temperature = read_dht11(pin)
+    return temperature
 
 
 def count_fingers(
