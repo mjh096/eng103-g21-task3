@@ -247,7 +247,7 @@ def create_landmarker_options(model_bytes: bytes) -> HandLandmarkerOptions:
         min_hand_detection_confidence=0.5,
         min_hand_presence_confidence=0.5,
         min_tracking_confidence=0.5,
-        running_mode=VisionRunningMode.IMAGE,
+        running_mode=VisionRunningMode.VIDEO,
     )
 
 
@@ -268,6 +268,8 @@ def main() -> None:
 
     current_label = "None"
 
+    t0 = time.time()
+
     with HandLandmarker.create_from_options(options) as landmarker:
         try:
             while True:
@@ -279,7 +281,8 @@ def main() -> None:
                 height, width = frame.shape[:2]
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                result = landmarker.detect(mp_image)
+                ts_ms = int((time.time() - t0) * 1000)
+                result = landmarker.detect_for_video(mp_image, ts_ms)
 
                 label = "No Hands"
 
