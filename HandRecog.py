@@ -36,6 +36,8 @@ GESTURE_TO_PIN = {
 # DHT Sensor configuration
 DHT_BCM_PIN = 4
 
+TEMP_GESTURE = "Fist"
+
 # Gesture helpers
 TIP_IDS = [4, 8, 12, 16, 20]  # thumb, index, middle, ring, pinky
 PIP_IDS = [2, 6, 10, 14, 18]  # thumb IP (2), and PIPs for others
@@ -253,6 +255,8 @@ def create_landmarker_options(model_bytes: bytes) -> HandLandmarkerOptions:
 
 def handle_gesture(label: str) -> None:
     """Toggle GPIO output corresponding to *label* if configured."""
+    if label == TEMP_GESTURE:
+        return  # temperature gesture is a non-LED action
     pin = GESTURE_TO_PIN.get(label)
     if pin is None:
         return
@@ -267,7 +271,6 @@ def main() -> None:
     options = create_landmarker_options(model_bytes)
 
     current_label = "None"
-
     t0 = time.time()
 
     with HandLandmarker.create_from_options(options) as landmarker:
@@ -281,40 +284,60 @@ def main() -> None:
                 height, width = frame.shape[:2]
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
                 ts_ms = int((time.time() - t0) * 1000)
                 result = landmarker.detect_for_video(mp_image, ts_ms)
 
                 label = "No Hands"
+                extra_info = ""  # appended to bottom label for this frame (e.g., temp/humidity)
 
                 if result.hand_landmarks:
+                    # Draw landmarks
                     for hand_landmarks in result.hand_landmarks:
                         for landmark in hand_landmarks:
                             x = int(landmark.x * width)
                             y = int(landmark.y * height)
                             cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
 
+                    # Use the first detected hand for gesture classification
                     first_hand = result.hand_landmarks[0]
-                    is_right = False
-                    if (
-                        result.handedness
-                        and len(result.handedness[0])
-                        and hasattr(result.handedness[0][0], "category_name")
-                    ):
-                        is_right = result.handedness[0][0].category_name == "Right"
 
+                    # Handedness (use .categories from Classifications)
+                    is_right = False
+                    if result.handedness and len(result.handedness) > 0:
+                        cats = getattr(result.handedness[0], "categories", None)
+                        if cats and len(cats) > 0 and hasattr(cats[0], "category_name"):
+                            is_right = (cats[0].category_name == "Right")
+
+                    # Classify the gesture
                     finger_states = count_fingers(first_hand, is_right, width, height)
                     label = gesture_from_states(finger_states)
 
+                    # Act only on changes (and not excluded labels)
                     if label not in EXCLUDE_GESTURE and label != current_label:
                         current_label = label
                         print(f"Detected Gesture: {label}")
-                        handle_gesture(label)
 
-                draw_bottom_label(frame, label)
+                        if label == TEMP_GESTURE:
+                            # Read DHT11 and report
+                            hum, temp = read_dht11()
+                            if hum is not None and temp is not None:
+                                msg = f"{temp:.1f}°C / {hum:.0f}%"
+                            else:
+                                msg = "Temp/Humidity: N/A"
+                            print(f"Message: Current Sensor Data {msg}")
+                            extra_info = f" • {msg}"  # show on-screen for this frame
+                        else:
+                            # Normal LED toggle path for mapped gestures
+                            handle_gesture(label)
 
+                # Draw the bottom bar (include any extra info we set)
+                draw_bottom_label(frame, label + extra_info if extra_info else label)
+
+                # UI loop / exit handling
                 cv2.imshow("Hands", frame)
                 key = cv2.waitKey(1) & 0xFF
-                if key in (ord("q"), 27):
+                if key in (ord("q"), 27):  # q or ESC
                     break
                 if cv2.getWindowProperty("Hands", cv2.WND_PROP_VISIBLE) < 1:
                     break
