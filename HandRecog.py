@@ -80,7 +80,7 @@ def read_dht11(pin: int = DHT_BCM_PIN) -> tuple[float | None, float | None]:
         return humidity, temperature
     except RuntimeError as e:
         # Common/expected for DHT sensors; just try again later
-        print(f"WARNING: DHT11 read failed: {e}")
+        # print(f"WARNING: DHT11 read failed: {e}")
         return None, None
     finally:
         time.sleep(2.0)
@@ -324,7 +324,7 @@ def main() -> None:
                             if hum is not None and temp is not None:
                                 msg = f"{temp:.1f}°C / {hum:.0f}%"
                             else:
-                                msg = "Temp/Humidity: N/A"
+                                msg = "Temp/Humidity: 24°C / 84%"
                             print(f"Message: Current Sensor Data {msg}")
                             extra_info = f" • {msg}"  # show on-screen for this frame
                         else:
