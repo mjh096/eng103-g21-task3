@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Sequence
 import time
+import json
+import requests
 import board
 import adafruit_dht
 import cv2
@@ -33,6 +35,9 @@ GESTURE_TO_PIN = {
     "Open Palm": 6,
 }
 
+# Discord API
+DISCORD_WEBHOOK="https://discord.com/api/webhooks/1427817541228691476/tgUhL0SlUKRgKUTeaVsRduAnVR0f-6dnLzch9vrU2ONweWgnNRRVLWM4S6M4qvFyJEHr"
+
 # DHT Sensor configuration
 DHT_BCM_PIN = 4
 
@@ -48,6 +53,22 @@ BaseOptions = mp.tasks.BaseOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+
+def send_discord_message(webook: str, message: str) -> bool:
+    payload = {
+        'content': message
+    }
+    
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        response = requests.post(webook, data=json.dumps(payload), headers=headers)
+        response.raise_for_status()
+        print(f"ACTION: Message sent to Discord API")
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Unable to send message: {e}")
 
 def _board_pin_from_bcm(bcm: int):
     """Map a BCM pin number (e.g., 4) to the corresponding `board.D#` pin (e.g., board.D4)."""
@@ -326,6 +347,7 @@ def main() -> None:
                             else:
                                 msg = "Temp/Humidity: 24°C / 84%"
                             print(f"Message: Current Sensor Data {msg}")
+                            send_discord_message(DISCORD_WEBHOOK,msg)
                             extra_info = f" • {msg}"  # show on-screen for this frame
                         else:
                             # Normal LED toggle path for mapped gestures
